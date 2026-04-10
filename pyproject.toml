@@ -1,7 +1,7 @@
 [project]
 name = "atomic-vault"
 version = "0.1.0"
-description = "Atomic Knowledge Vault CLI managed by LLM-as-Architect"
+description = "Atomic Knowledge Vault: LLM-as-Architect semantic engine for structured technical notes using LanceDB and FastEmbed"
 requires-python = ">=3.10"
 dependencies = [
     "rich>=13.0.0",
