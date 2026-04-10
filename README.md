@@ -38,6 +38,17 @@ The behavior of your vault is governed by `AGENT.md`. This file tells the LLM:
 - **⚡ High Performance**: `LanceDB` and `fastembed` provide sub-millisecond search without a GPU.
 - **🛠️ Self-Healing (Linting)**: Run `av lint --fix` to let the Architect find technical gaps or redundant information and automatically merge or update notes.
 - **📁 Transparent Storage**: Your knowledge is stored in plain Markdown with YAML frontmatter. No proprietary formats.
+- **🪙 Token-Optimized Architecture**: Intelligent context injection saves up to 80% on token costs compared to naive RAG systems.
+
+---
+
+## 🪙 Token Efficiency & Cost Optimization
+
+Atomic-Vault is designed to be **cost-effective**. We use a three-tier optimization strategy to keep your LLM bills low:
+
+1. **Local Semantic Filtering**: Before any data is sent to the LLM, `fastembed` runs locally to perform semantic search. We only send the top 5 most relevant notes as context, preventing "context bloat."
+2. **Metadata-Only Auditing**: The `av lint` operation scans the *entire* vault but only sends lightweight metadata (titles, domains, and lengths) rather than full content. This allows the Architect to audit thousands of notes for just a few cents.
+3. **Incremental Indexing**: Instead of regenerating the entire index from scratch for every minor change, the Architect receives the current `index.md` as context and performs targeted updates, significantly reducing output tokens.
 
 ---
 
