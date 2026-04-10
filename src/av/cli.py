@@ -49,7 +49,7 @@ def ingest(filename):
     
     for f in files:
         try:
-            with console.status(f"[blue]Architect is processing {f}...") as status:
+            with console.status(f"[blue]Architect is processing {f}..."):
                 count = agent.ingest(f)
                 tools.archive_raw_file(vault_root, f)
                 console.print(f"[green]✓ {f}: {count} note(s) mirrored to vault.[/green]")
@@ -64,7 +64,8 @@ def ingest(filename):
 def sync():
     """Re-index the entire vault from the filesystem to the vector DB."""
     config = load_config()
-    if not config: return
+    if not config:
+        return
     
     agent = Agent(config)
     vault_root = Path(config["vault_root"])
@@ -93,10 +94,11 @@ def sync():
 def lint(fix, verbose):
     """Perform a vault health check and link audit."""
     config = load_config()
-    if not config: return
+    if not config:
+        return
     
     agent = Agent(config)
-    with console.status("[bold blue]Auditing vault health...") as status:
+    with console.status("[bold blue]Auditing vault health..."):
         report = agent.lint(fix=fix)
         
         if fix:
@@ -126,7 +128,8 @@ def lint(fix, verbose):
 def status():
     """Display vault metrics and domain distribution."""
     config = load_config()
-    if not config: return
+    if not config:
+        return
     
     agent = Agent(config)
     stats = agent.rag.get_vault_stats()

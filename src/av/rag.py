@@ -47,7 +47,8 @@ class RagManager:
     def search_similar(self, query_vector: List[float], limit: int = 5) -> List[Dict[str, Any]]:
         """Perform semantic search for similar technical notes."""
         table = self._get_table()
-        if not table: return []
+        if not table:
+            return []
         return table.search(query_vector).limit(limit).to_list()
 
     def get_vault_stats(self) -> Dict[str, Any]:
@@ -65,11 +66,13 @@ class RagManager:
     def get_all_notes_metadata(self) -> List[Dict[str, Any]]:
         """Fetch lightweight summary of every note for auditing."""
         table = self._get_table()
-        if not table: return []
+        if not table:
+            return []
         
         # We only pull columns needed for linting to save memory/tokens
         df = table.to_pandas()
-        if df.empty: return []
+        if df.empty:
+            return []
         
         # Calculate length and extract basic info
         df['content_length'] = df['content'].str.len()

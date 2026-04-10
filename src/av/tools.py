@@ -11,7 +11,8 @@ def get_vault_map(vault_root: str) -> str:
     
     for d_name in relevant_dirs:
         dir_path = vault_path / d_name
-        if not dir_path.exists(): continue
+        if not dir_path.exists():
+            continue
         lines.append(f"/{d_name}")
         for domain in sorted(dir_path.iterdir()):
             if domain.is_dir() and not domain.name.startswith("."):
@@ -41,7 +42,8 @@ def delete_note_by_title(vault_root: str, title: str):
     """Remove a note from the filesystem by its title (Search-based)."""
     vault_path = Path(vault_root) / "Atomic Notes"
     for domain in vault_path.iterdir():
-        if not domain.is_dir(): continue
+        if not domain.is_dir():
+            continue
         for note in domain.iterdir():
             if note.suffix == ".md":
                 content = note.read_text(encoding="utf-8")
@@ -60,8 +62,10 @@ def find_metadata(raw_md: str) -> dict:
         fm_content = fm_match.group(1)
         t_match = re.search(r"^title:\s*(.+)$", fm_content, re.MULTILINE | re.IGNORECASE)
         d_match = re.search(r"^domain:\s*(.+)$", fm_content, re.MULTILINE | re.IGNORECASE)
-        if t_match: data["title"] = t_match.group(1).strip().strip("'\"")
-        if d_match: data["domain"] = d_match.group(1).strip().strip("'\"")
+        if t_match:
+            data["title"] = t_match.group(1).strip().strip("'\"")
+        if d_match:
+            data["domain"] = d_match.group(1).strip().strip("'\"")
 
     # Fallback to # Title if not in frontmatter
     if data["title"] == "Untitled":
@@ -103,7 +107,8 @@ def read_raw_file(vault_root: str, filename: str) -> str:
 def list_raw_files(vault_root: str) -> list:
     """List all available files in /Raw for batch ingestion."""
     raw_dir = Path(vault_root) / "Raw"
-    if not raw_dir.exists(): return []
+    if not raw_dir.exists():
+        return []
     return [f.name for f in raw_dir.iterdir() if f.is_file() and not f.name.startswith(".")]
 
 def archive_raw_file(vault_root: str, filename: str):

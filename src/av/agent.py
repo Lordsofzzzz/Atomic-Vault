@@ -79,13 +79,15 @@ REMINDER: Start directly with 'FILE: '. Output ONLY the required FILE/CONTENT bl
         created_count = 0
         
         for block in blocks:
-            if "CONTENT:" not in block.upper(): continue
+            if "CONTENT:" not in block.upper():
+                continue
             try:
                 parts = re.split(r"CONTENT:\s*", block, 1, flags=re.IGNORECASE)
                 target_path = parts[0].strip()
                 markdown_content = parts[1].strip()
                 
-                if len(markdown_content) < 50: continue
+                if len(markdown_content) < 50:
+                    continue
                 
                 # Save and Index
                 tools.save_note_at_path(self.vault_root, target_path, markdown_content)
@@ -169,7 +171,8 @@ Do NOT use any other headers like [REDUNDANCY_DETECTED]. Use ONLY the [ISSUE:] t
         
         for line in raw_output.split("\n"):
             line = line.strip()
-            if not line: continue
+            if not line:
+                continue
             
             if line.startswith("[SUMMARY]:"):
                 report_data["summary"] = line.replace("[SUMMARY]:", "").strip()
@@ -181,7 +184,6 @@ Do NOT use any other headers like [REDUNDANCY_DETECTED]. Use ONLY the [ISSUE:] t
                     report_data["issues"].append({"type": parts[0], "file": parts[1], "action": parts[2]})
             elif line.startswith("["):
                 # Fallback for untagged but bracketed headers like [DOMAIN_INCONSISTENCY]
-                tag = line[1:].split("]")[0].replace("_", " ").title()
                 # Check next line for file/action
                 continue 
             elif line.startswith("- **File") or line.startswith("- **Issue"):
