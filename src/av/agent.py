@@ -34,10 +34,14 @@ class Agent:
         vault_map = tools.get_vault_map(self.vault_root)
         agent_protocol = self._get_agent_md()
         
+        # Get current index for context
+        index_path = Path(self.vault_root) / "index.md"
+        current_index = index_path.read_text(encoding="utf-8") if index_path.exists() else "No index yet."
+        
         query_vector = self._embed(raw_content[:500])
         similar_notes = self.rag.search_similar(query_vector, limit=5)
         
-        context_str = f"CURRENT VAULT MAP:\n{vault_map}\n\n### Similar Notes from Memory:\n\n"
+        context_str = f"CURRENT VAULT MAP (Directory Structure):\n{vault_map}\n\nCURRENT INDEX:\n{current_index}\n\n### Similar Notes from Memory:\n\n"
         for note in similar_notes:
             context_str += f"--- {note['title']} ---\n{note['content']}\n\n"
 
@@ -90,15 +94,18 @@ REMINDER: Start directly with 'FILE: '. Output ONLY the required FILE/CONTENT bl
                     continue
                 
                 # Save and Index
-                tools.save_note_at_path(self.vault_root, target_path, markdown_content)
+                is_index = target_path.lower() == "index.md"
+                actual_path = tools.save_note_at_path(self.vault_root, target_path, markdown_content)
                 meta = tools.find_metadata(markdown_content)
-                tools.update_index(self.vault_root, meta["title"])
-                tools.append_log(self.vault_root, "architect", target_path)
                 
-                # Vector DB Sync
-                vector = self._embed(markdown_content[:2000])
-                self.rag.upsert_note(meta["title"], meta["domain"], markdown_content, vector, target_path)
-                created_count += 1
+                # Only log and sync to vector DB if it's not the index itself
+                if not is_index:
+                    tools.append_log(self.vault_root, "architect", target_path)
+                    
+                    # Vector DB Sync
+                    vector = self._embed(markdown_content[:2000])
+                    self.rag.upsert_note(meta["title"], meta["domain"], markdown_content, vector, target_path)
+                    created_count += 1
             except Exception as e:
                 print(f"Architect directive failed: {e}")
                 

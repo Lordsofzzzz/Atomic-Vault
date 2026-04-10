@@ -27,12 +27,10 @@ def save_note_at_path(vault_root: str, relative_path: str, content: str) -> str:
     rel_path = relative_path.lstrip("/")
     abs_path = Path(vault_root) / rel_path
     
-    # Safety: Ensure it stays within Atomic Notes if path is malformed
-    if "Atomic Notes" not in str(abs_path):
+    # Safety: Ensure it stays within vault root and is either index.md or in Atomic Notes
+    if rel_path.lower() != "index.md" and "Atomic Notes" not in str(abs_path):
         abs_path = Path(vault_root) / "Atomic Notes" / "Misc" / abs_path.name
 
-    # If the file already exists, we might need to handle a title change in the DB
-    # We will let the Agent handle the DB update, but we return the path
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     with open(abs_path, "w", encoding="utf-8") as f:
         f.write(content)
@@ -74,19 +72,6 @@ def find_metadata(raw_md: str) -> dict:
             data["title"] = title_match.group(1).strip()
             
     return data
-
-def update_index(vault_root: str, title: str):
-    """Append the note title to the central index.md if not already present."""
-    index_path = Path(vault_root) / "index.md"
-    entry = f"- [[{title}]]"
-    
-    content = ""
-    if index_path.exists():
-        content = index_path.read_text(encoding="utf-8")
-        
-    if entry not in content:
-        with open(index_path, "a", encoding="utf-8") as f:
-            f.write(entry + "\n")
 
 def append_log(vault_root: str, action: str, target: str):
     """Append chronological activity to Logs/log.md."""
