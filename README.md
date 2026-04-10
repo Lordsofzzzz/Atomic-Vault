@@ -30,12 +30,15 @@ The behavior of your vault is governed by `AGENT.md`. This file tells the LLM:
 - **Atomicity**: One technical concept per note.
 - **Linking Logic**: How to connect related concepts.
 
+**Total Dynamicity**: Because the LLM reads `AGENT.md` as its system prompt, you can change the entire structure of your knowledge base simply by editing this Markdown file. No Python code changes are ever needed to refactor how the "Architect" thinks.
+
 ---
 
 ## 🚀 Key Features
 
 - **🤖 Autonomous Organization**: No manual filing. The LLM decides the folder structure.
 - **⚡ High Performance**: `LanceDB` and `fastembed` provide sub-millisecond search without a GPU.
+- **🌀 Dynamic Protocol Control**: The entire system's behavior is defined by `AGENT.md`. Swap the protocol to change how your vault organizes itself, no code changes required.
 - **🛠️ Self-Healing (Linting)**: Run `av lint --fix` to let the Architect find technical gaps or redundant information and automatically merge or update notes.
 - **📁 Transparent Storage**: Your knowledge is stored in plain Markdown with YAML frontmatter. No proprietary formats.
 - **🔄 1:1 Mirroring**: The Vector DB is a perfect, one-to-one semantic copy of your Markdown files, ensuring total data parity and local-first reliability.
