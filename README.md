@@ -38,6 +38,7 @@ The behavior of your vault is governed by `AGENT.md`. This file tells the LLM:
 - **⚡ High Performance**: `LanceDB` and `fastembed` provide sub-millisecond search without a GPU.
 - **🛠️ Self-Healing (Linting)**: Run `av lint --fix` to let the Architect find technical gaps or redundant information and automatically merge or update notes.
 - **📁 Transparent Storage**: Your knowledge is stored in plain Markdown with YAML frontmatter. No proprietary formats.
+- **🔄 1:1 Mirroring**: The Vector DB is a perfect, one-to-one semantic copy of your Markdown files, ensuring total data parity and local-first reliability.
 - **🪙 Token-Optimized Architecture**: Intelligent context injection saves up to 80% on token costs compared to naive RAG systems.
 
 ---
