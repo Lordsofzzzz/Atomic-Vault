@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 import litellm
+from fastembed import TextEmbedding
 from .rag import RagManager
 from . import tools
 
@@ -13,6 +14,7 @@ class Agent:
         self.db_path = str(Path(self.vault_root) / ".av-db")
         self.rag = RagManager(self.db_path)
         self.model = f"{config['provider']}/{config['model']}"
+        self.embedding_model = TextEmbedding()
 
     def _get_agent_md(self) -> str:
         """Fetch the Master Protocol (AGENT.md) from the vault root."""
@@ -22,9 +24,9 @@ class Agent:
         return agent_path.read_text(encoding="utf-8")
 
     def _embed(self, text: str) -> list:
-        """Generate dummy vector for memory indexing."""
-        import random
-        return [random.uniform(-1, 1) for _ in range(384)]
+        """Generate vector for memory indexing using FastEmbed."""
+        embeddings = list(self.embedding_model.embed([text]))
+        return embeddings[0].tolist()
 
     def ingest(self, filename: str) -> int:
         """Directs the LLM Architect to process raw input and place notes."""

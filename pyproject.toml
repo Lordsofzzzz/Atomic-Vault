@@ -6,14 +6,14 @@ requires-python = ">=3.10"
 dependencies = [
     "rich>=13.0.0",
     "lancedb>=0.4.0",
-    "sentence-transformers>=2.2.0",
+    "fastembed>=0.2.0",
     "pyyaml>=6.0.0",
     "click>=8.0.0",
     "pydantic>=2.0.0",
 ]
 
 [project.scripts]
-av = "av.agent:main"
+av = "av.cli:cli"
 
 [build-system]
 requires = ["setuptools>=61.0"]
