@@ -1,0 +1,7 @@
+click>=8.1.0
+rich>=13.0.0
+litellm>=1.30.0
+lancedb>=0.6.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
+pandas>=2.0.0

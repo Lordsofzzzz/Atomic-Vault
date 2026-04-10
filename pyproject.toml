@@ -1,0 +1,20 @@
+[project]
+name = "atomic-vault"
+version = "0.1.0"
+description = "Atomic Knowledge Vault CLI managed by LLM-as-Architect"
+requires-python = ">=3.10"
+dependencies = [
+    "rich>=13.0.0",
+    "lancedb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+    "pyyaml>=6.0.0",
+    "click>=8.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+av = "av.agent:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

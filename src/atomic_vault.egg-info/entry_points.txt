@@ -1,0 +1,2 @@
+[console_scripts]
+av = av.cli:cli
