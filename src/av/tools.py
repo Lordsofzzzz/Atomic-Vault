@@ -83,11 +83,35 @@ def append_log(vault_root: str, action: str, target: str):
         f.write(entry)
 
 def read_raw_file(vault_root: str, filename: str) -> str:
-    """Read source file from /Raw directory."""
+    """Read source file from /Raw directory (handles MD, TXT, PDF, DOCX)."""
     raw_path = Path(vault_root) / "Raw" / filename
     if not raw_path.exists():
         raise FileNotFoundError(f"Source file {filename} not found in /Raw.")
-    return raw_path.read_text(encoding="utf-8")
+    
+    suffix = raw_path.suffix.lower()
+    
+    if suffix in [".md", ".txt"]:
+        return raw_path.read_text(encoding="utf-8")
+    
+    elif suffix == ".pdf":
+        from pypdf import PdfReader
+        reader = PdfReader(raw_path)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+    
+    elif suffix == ".docx":
+        import docx
+        doc = docx.Document(raw_path)
+        return "\n".join([para.text for para in doc.paragraphs])
+    
+    else:
+        # Try reading as text as fallback
+        try:
+            return raw_path.read_text(encoding="utf-8")
+        except:
+            raise ValueError(f"Unsupported file format: {suffix}")
 
 def list_raw_files(vault_root: str) -> list:
     """List all available files in /Raw for batch ingestion."""

@@ -1,9 +1,37 @@
 import re
 from pathlib import Path
+from typing import List, Optional, Iterable
 import litellm
+import instructor
+from pydantic import BaseModel, Field, field_validator
 from fastembed import TextEmbedding
 from .rag import RagManager
 from . import tools
+
+class NoteAction(BaseModel):
+    """Represents a single file operation directed by the Architect."""
+    file_path: str = Field(..., description="The relative path to the file (e.g., 'Atomic Notes/AWS/Lambda.md' or 'index.md')")
+    content: str = Field(..., description="The full markdown content of the file")
+    is_deletion: bool = Field(default=False, description="Whether this file should be deleted")
+
+class ArchitectResponse(BaseModel):
+    """The structured response from the Architect containing multiple actions."""
+    summary: str = Field(..., description="A brief summary of the changes made")
+    actions: List[NoteAction] = Field(
+        ..., 
+        description="A list of NoteAction objects. IMPORTANT: Each item in this list MUST be a full object with 'file_path', 'content', and 'is_deletion'. DO NOT return a count or a list of numbers. You MUST return the actual text content for every file you want to create or update."
+    )
+
+    @field_validator("actions", mode="before")
+    @classmethod
+    def validate_actions(cls, v):
+        if isinstance(v, list) and len(v) > 0 and (isinstance(v[0], int) or isinstance(v[0], str)):
+             # The model is returning something like [6] or ["6"]
+             # Log this internally or handle it if needed, but for now we raise to trigger retry
+             raise ValueError(f"The 'actions' field received {v}. This is invalid. You MUST return a list of FULL objects like [{{'file_path': '...', 'content': '...', 'is_deletion': False}}]. Repeat: DO NOT return counts. Return CONTENT.")
+        if not isinstance(v, list):
+            return [v]
+        return v
 
 class Agent:
     """Orchestrator for the Atomic Vault knowledge engine."""
@@ -15,6 +43,8 @@ class Agent:
         self.rag = RagManager(self.db_path)
         self.model = f"{config['provider']}/{config['model']}"
         self.embedding_model = TextEmbedding()
+        # Initialize instructor client
+        self.client = instructor.from_litellm(litellm.completion)
 
     def _get_agent_md(self) -> str:
         """Fetch the Master Protocol (AGENT.md) from the vault root."""
@@ -27,6 +57,18 @@ class Agent:
         """Generate vector for memory indexing using FastEmbed."""
         embeddings = list(self.embedding_model.embed([text]))
         return embeddings[0].tolist()
+
+    # Tool functions that the LLM can call
+    def read_note(self, file_path: str) -> str:
+        """Read the full content of an existing note."""
+        abs_path = Path(self.vault_root) / file_path.lstrip("/")
+        if abs_path.exists() and abs_path.is_file():
+            return abs_path.read_text(encoding="utf-8")
+        return f"Error: File {file_path} not found."
+
+    def list_vault(self, directory: str = "Atomic Notes") -> str:
+        """List files and subdirectories in the vault."""
+        return tools.get_vault_map(self.vault_root)
 
     def ingest(self, filename: str) -> int:
         """Directs the LLM Architect to process raw input and place notes."""
@@ -51,73 +93,70 @@ CONTENT:
 
 {context_str}
 
-REMINDER: Start directly with 'FILE: '. Output ONLY the required FILE/CONTENT blocks."""
+TASK: Segment the content into atomic technical notes.
+"""
 
-        response = litellm.completion(
+        # Back to a simple response model to avoid 'Iterable' confusion with some providers
+        response = self.client.chat.completions.create(
             model=self.model,
+            response_model=ArchitectResponse,
             messages=[
                 {"role": "system", "content": agent_protocol},
                 {"role": "user", "content": user_prompt}
             ]
         )
 
-        raw_output = response.choices[0].message.content
-        return self._process_llm_output(raw_output)
+        return self._execute_actions(response)
 
-    def _process_llm_output(self, raw_output: str) -> int:
-        """Parses the Architect's directive and executes file operations."""
-        # Handle DELETION directives
-        delete_matches = re.findall(r"DELETE:\s*(.+)", raw_output, flags=re.IGNORECASE)
-        for target in delete_matches:
+    def _execute_actions(self, response: ArchitectResponse) -> int:
+        """Executes the file operations defined in the structured Architect response."""
+        total_ops = 0
+        
+        for action in response.actions:
+            total_ops += self._execute_single_action(action)
+                
+        return total_ops
+
+    def _execute_single_action(self, action: NoteAction) -> int:
+        """Executes a single file operation."""
+        target_path = action.file_path.strip()
+        
+        if action.is_deletion:
             try:
-                target_path = target.strip()
                 abs_path = Path(self.vault_root) / target_path.lstrip("/")
                 if abs_path.exists() and abs_path.is_file():
                     abs_path.unlink()
                     self.rag.delete_note_by_path(target_path)
+                    return 1
             except Exception as e:
                 print(f"Deletion failed: {e}")
+            return 0
 
-        # Split into FILE blocks
-        blocks = re.split(r"FILE:\s*", raw_output, flags=re.IGNORECASE)
-        created_count = 0
-        
-        for block in blocks:
-            if "CONTENT:" not in block.upper():
-                continue
-            try:
-                parts = re.split(r"CONTENT:\s*", block, 1, flags=re.IGNORECASE)
-                target_path = parts[0].strip()
-                markdown_content = parts[1].strip()
-                
-                if len(markdown_content) < 50:
-                    continue
-                
-                # Save and Index
-                is_index = target_path.lower() == "index.md"
-                actual_path = tools.save_note_at_path(self.vault_root, target_path, markdown_content)
-                meta = tools.find_metadata(markdown_content)
-                
-                # Only log and sync to vector DB if it's not the index itself
-                if not is_index:
-                    tools.append_log(self.vault_root, "architect", target_path)
-                    
-                    # Vector DB Sync
-                    vector = self._embed(markdown_content[:2000])
-                    self.rag.upsert_note(meta["title"], meta["domain"], markdown_content, vector, target_path)
-                    created_count += 1
-            except Exception as e:
-                print(f"Architect directive failed: {e}")
-                
-        return created_count + len(delete_matches)
-
+        # Handle creations and updates
+        try:
+            markdown_content = action.content.strip()
+            if len(markdown_content) < 50 and target_path.lower() != "index.md":
+                return 0
+            
+            is_index = target_path.lower() == "index.md"
+            actual_path = tools.save_note_at_path(self.vault_root, target_path, markdown_content)
+            meta = tools.find_metadata(markdown_content)
+            
+            if not is_index:
+                tools.append_log(self.vault_root, "architect", target_path)
+                vector = self._embed(markdown_content[:2000])
+                self.rag.upsert_note(meta["title"], meta["domain"], markdown_content, vector, target_path)
+                return 1
+            return 0
+        except Exception as e:
+            print(f"Architect action failed: {e}")
+            return 0
 
     def lint(self, fix: bool = False) -> dict:
         """Vector-driven vault health audit with structured output."""
         metadata = self.rag.get_all_notes_metadata()
         vault_map = tools.get_vault_map(self.vault_root)
         raw_files = tools.list_raw_files(self.vault_root)
-        
         protocol = self._get_agent_md()
         
         audit_context = f"""
@@ -132,78 +171,29 @@ METADATA FROM VECTOR DB:
 {metadata}
 """
         
-        fix_instruction = ""
+        fix_instruction = "LINT MODE: Identify gaps, redundancies, and link failures."
         if fix:
-            fix_instruction = "FIX MODE ENABLED: Remediate density, links, and domains. Use [FIX_LOG] tags."
+            fix_instruction += " FIX MODE ENABLED: Remediate issues by issuing NoteActions."
 
         user_prompt = f"""{audit_context}
 
 PERFORM VAULT LINT according to Section 3 of your protocol.
-{fix_instruction}
+{fix_instruction}"""
 
-GUIDELINE: Be PRAGMATIC. Do NOT flag minor naming mismatches between filenames and internal titles (e.g. "AWS - Lambda" vs "AWS: Lambda") as issues. 
-Focus ONLY on:
-1. Significant Technical Density gaps (missing code/logic).
-2. Major Redundancy (exact duplicate notes).
-3. Critical Link gaps between related Domains.
-
-IMPORTANT: You MUST use the following exact tags for EVERY finding:
-[SUMMARY]: <one line>
-[ISSUE: Type | File | Action]
-[FIX_LOG: File | Detail] (only in fix mode)
-
-Example:
-[SUMMARY]: Found 2 issues.
-[ISSUE: Density | api_test.md | Add code examples]
-
-Do NOT use any other headers like [REDUNDANCY_DETECTED]. Use ONLY the [ISSUE:] tag."""
-
-        response = litellm.completion(
+        response = self.client.chat.completions.create(
             model=self.model,
+            response_model=ArchitectResponse,
             messages=[
                 {"role": "system", "content": protocol},
                 {"role": "user", "content": user_prompt}
             ]
         )
         
-        raw_output = response.choices[0].message.content
-        
-        # Parse tags
-        report_data = {
-            "summary": "No summary found.",
-            "issues": [],
-            "fixes": [],
-            "raw": raw_output
-        }
-        
-        for line in raw_output.split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            
-            if line.startswith("[SUMMARY]:"):
-                report_data["summary"] = line.replace("[SUMMARY]:", "").strip()
-            elif line.startswith("[ISSUE:"):
-                # Format: [ISSUE: type | file | action]
-                content = line[7:-1]
-                parts = [p.strip() for p in content.split("|")]
-                if len(parts) >= 3:
-                    report_data["issues"].append({"type": parts[0], "file": parts[1], "action": parts[2]})
-            elif line.startswith("["):
-                # Fallback for untagged but bracketed headers like [DOMAIN_INCONSISTENCY]
-                # Check next line for file/action
-                continue 
-            elif line.startswith("- **File") or line.startswith("- **Issue"):
-                # Try to extract from the list if we have a current tag
-                pass
-
-        # If no issues were parsed but we have text, add a generic issue for the user to see in verbose
-        if not report_data["issues"] and "[ISSUE:" not in raw_output:
-             if "[" in raw_output:
-                 report_data["summary"] = "Architect used non-standard tags. Use --verbose to see full report."
-
-
         if fix:
-            self._process_llm_output(raw_output)
+            self._execute_actions(response)
             
-        return report_data
+        return {
+            "summary": response.summary,
+            "actions_count": len(response.actions),
+            "raw": response.model_dump_json(indent=2)
+        }
