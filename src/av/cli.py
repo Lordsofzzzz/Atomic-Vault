@@ -103,25 +103,25 @@ def lint(fix, verbose):
         
         if fix:
             console.print("\n[bold green]Remediation complete:[/bold green]")
-            for fix_item in report["fixes"]:
-                console.print(f" [green]✓[/green] {fix_item['file']}: {fix_item['detail']}")
+            for action in report["actions"]:
+                console.print(f" [green]✓[/green] {action['file_path']}: Updated")
         else:
             console.print(f"\n[bold cyan]Architect's Summary:[/bold cyan] {report['summary']}")
             
-            if report["issues"]:
-                table = Table(title="Vault Issues Identified")
-                table.add_column("Type", style="red")
+            if report["actions"]:
+                table = Table(title="Vault Actions Recommended")
                 table.add_column("File", style="yellow")
-                table.add_column("Action", style="green")
+                table.add_column("Type", style="cyan")
                 
-                for issue in report["issues"]:
-                    table.add_row(issue["type"], issue["file"], issue["action"])
+                for action in report["actions"]:
+                    action_type = "Delete" if action["is_deletion"] else "Update/Create"
+                    table.add_row(action["file_path"], action_type)
                 console.print(table)
             else:
                 console.print("[green]No issues found. Vault is healthy.[/green]")
 
         if verbose:
-            console.print("\n[bold]Full Report:[/bold]")
+            console.print("\n[bold]Full Response:[/bold]")
             console.print(report["raw"])
 
 @cli.command()

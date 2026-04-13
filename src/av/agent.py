@@ -1,8 +1,8 @@
 import re
+import json
 from pathlib import Path
 from typing import List, Optional, Iterable
 import litellm
-import instructor
 from pydantic import BaseModel, Field, field_validator
 from fastembed import TextEmbedding
 from .rag import RagManager
@@ -22,17 +22,6 @@ class ArchitectResponse(BaseModel):
         description="A list of NoteAction objects. IMPORTANT: Each item in this list MUST be a full object with 'file_path', 'content', and 'is_deletion'. DO NOT return a count or a list of numbers. You MUST return the actual text content for every file you want to create or update."
     )
 
-    @field_validator("actions", mode="before")
-    @classmethod
-    def validate_actions(cls, v):
-        if isinstance(v, list) and len(v) > 0 and (isinstance(v[0], int) or isinstance(v[0], str)):
-             # The model is returning something like [6] or ["6"]
-             # Log this internally or handle it if needed, but for now we raise to trigger retry
-             raise ValueError(f"The 'actions' field received {v}. This is invalid. You MUST return a list of FULL objects like [{{'file_path': '...', 'content': '...', 'is_deletion': False}}]. Repeat: DO NOT return counts. Return CONTENT.")
-        if not isinstance(v, list):
-            return [v]
-        return v
-
 class Agent:
     """Orchestrator for the Atomic Vault knowledge engine."""
 
@@ -43,8 +32,6 @@ class Agent:
         self.rag = RagManager(self.db_path)
         self.model = f"{config['provider']}/{config['model']}"
         self.embedding_model = TextEmbedding()
-        # Initialize instructor client
-        self.client = instructor.from_litellm(litellm.completion)
 
     def _get_agent_md(self) -> str:
         """Fetch the Master Protocol (AGENT.md) from the vault root."""
@@ -87,6 +74,8 @@ class Agent:
         for note in similar_notes:
             context_str += f"--- {note['title']} ---\n{note['content']}\n\n"
 
+        schema_json = json.dumps(ArchitectResponse.model_json_schema(), indent=2)
+
         user_prompt = f"""PROCESS FILE: {filename}
 CONTENT:
 {raw_content}
@@ -94,17 +83,34 @@ CONTENT:
 {context_str}
 
 TASK: Segment the content into atomic technical notes.
+You MUST return a JSON object that matches this schema:
+{schema_json}
 """
 
-        # Back to a simple response model to avoid 'Iterable' confusion with some providers
-        response = self.client.chat.completions.create(
+        # Using raw litellm with JSON mode to bypass instructor validation issues with some providers
+        completion = litellm.completion(
             model=self.model,
-            response_model=ArchitectResponse,
+            response_format={ "type": "json_object" },
             messages=[
                 {"role": "system", "content": agent_protocol},
                 {"role": "user", "content": user_prompt}
             ]
         )
+        
+        raw_response = completion.choices[0].message.content
+        # print(f"DEBUG RAW RESPONSE: {raw_response}") # Useful for debugging
+        try:
+            response_data = json.loads(raw_response)
+        except json.JSONDecodeError as e:
+            # Try to extract JSON if there is preamble
+            json_match = re.search(r"\{.*\}", raw_response, re.DOTALL)
+            if json_match:
+                response_data = json.loads(json_match.group(0))
+            else:
+                raise e
+        
+        response = ArchitectResponse.model_validate(response_data)
+
 
         return self._execute_actions(response)
 
@@ -175,25 +181,45 @@ METADATA FROM VECTOR DB:
         if fix:
             fix_instruction += " FIX MODE ENABLED: Remediate issues by issuing NoteActions."
 
+        schema_json = json.dumps(ArchitectResponse.model_json_schema(), indent=2)
+
         user_prompt = f"""{audit_context}
 
 PERFORM VAULT LINT according to Section 3 of your protocol.
-{fix_instruction}"""
+{fix_instruction}
 
-        response = self.client.chat.completions.create(
+You MUST return a JSON object that matches this schema:
+{schema_json}
+"""
+
+        completion = litellm.completion(
             model=self.model,
-            response_model=ArchitectResponse,
+            response_format={ "type": "json_object" },
             messages=[
                 {"role": "system", "content": protocol},
                 {"role": "user", "content": user_prompt}
             ]
         )
         
+        raw_response = completion.choices[0].message.content
+        try:
+            response_data = json.loads(raw_response)
+        except json.JSONDecodeError as e:
+            # Try to extract JSON if there is preamble
+            json_match = re.search(r"\{.*\}", raw_response, re.DOTALL)
+            if json_match:
+                response_data = json.loads(json_match.group(0))
+            else:
+                raise e
+        
+        response = ArchitectResponse.model_validate(response_data)
+        
         if fix:
             self._execute_actions(response)
             
         return {
             "summary": response.summary,
-            "actions_count": len(response.actions),
+            "actions": [a.model_dump() for a in response.actions],
             "raw": response.model_dump_json(indent=2)
         }
+
